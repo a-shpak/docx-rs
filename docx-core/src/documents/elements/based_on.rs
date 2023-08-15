@@ -5,7 +5,7 @@ use crate::xml_builder::*;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct BasedOn {
-    val: String,
+    pub val: String,
 }
 
 impl BasedOn {
