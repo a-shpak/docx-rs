@@ -15,7 +15,7 @@ use crate::xml_builder::*;
 #[serde(rename_all = "camelCase")]
 pub struct RunFonts {
     #[serde(skip_serializing_if = "Option::is_none")]
-    ascii: Option<String>,
+    pub ascii: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     hi_ansi: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
