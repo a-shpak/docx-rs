@@ -4,7 +4,7 @@ use std::io::prelude::*;
 use std::io::Seek;
 use zip::write::FileOptions;
 
-pub fn zip<W>(w: &mut W, xml: XMLDocx) -> zip::result::ZipResult<()>
+pub fn zip<W>(w: W, xml: XMLDocx) -> zip::result::ZipResult<W>
 where
     W: Write + Seek,
 {
@@ -98,6 +98,5 @@ where
         zip.write_all(&xml.custom_item_props[i])?;
     }
 
-    zip.finish()?;
-    Ok(())
+    Ok(zip.finish()?)
 }

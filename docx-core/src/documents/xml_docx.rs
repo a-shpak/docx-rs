@@ -29,7 +29,7 @@ pub struct XMLDocx {
 }
 
 impl XMLDocx {
-    pub fn pack<W>(self, w: &mut W) -> zip::result::ZipResult<()>
+    pub fn pack<W>(self, w: W) -> zip::result::ZipResult<W>
     where
         W: Write + Seek,
     {
