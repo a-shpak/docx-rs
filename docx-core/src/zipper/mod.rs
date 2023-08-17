@@ -4,7 +4,7 @@ use std::io::prelude::*;
 use std::io::Seek;
 use zip::write::FileOptions;
 
-pub fn zip<W>(w: W, xml: XMLDocx) -> zip::result::ZipResult<()>
+pub fn zip<W>(w: &mut W, xml: XMLDocx) -> zip::result::ZipResult<()>
 where
     W: Write + Seek,
 {
