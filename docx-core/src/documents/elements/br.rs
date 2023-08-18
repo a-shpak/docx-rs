@@ -7,7 +7,7 @@ use crate::xml_builder::*;
 
 #[derive(Debug, Clone, Deserialize, PartialEq)]
 pub struct Break {
-    break_type: BreakType,
+    pub break_type: BreakType,
 }
 
 impl Break {
