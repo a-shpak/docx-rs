@@ -244,6 +244,11 @@ impl Run {
         self
     }
 
+    pub fn strike(mut self) -> Run {
+        self.run_property = self.run_property.strike();
+        self
+    }
+
     pub fn disable_bold(mut self) -> Run {
         self.run_property = self.run_property.disable_bold();
         self
