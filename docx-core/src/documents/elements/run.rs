@@ -284,6 +284,11 @@ impl Run {
         self
     }
 
+    pub fn shading(mut self, s: Shading) -> Run {
+        self.run_property = self.run_property.shading(s);
+        self
+    }
+
     pub(crate) fn set_property(mut self, p: RunProperty) -> Run {
         self.run_property = p;
         self

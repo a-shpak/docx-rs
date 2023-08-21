@@ -140,6 +140,11 @@ impl ElementReader for RunProperty {
                                 rp = rp.delete(del);
                             }
                         }
+                        XMLElement::Shading => {
+                            if let Ok(shd) = Shading::read(r, &attributes) {
+                                rp = rp.shading(shd);
+                            }
+                        }
                         _ => {}
                     }
                 }
