@@ -1265,25 +1265,16 @@ fn resolve_image_source(
     pic: &mut Pic,
     defer_images: &mut Vec<(String, Vec<u8>)>,
 ) -> Option<Vec<u8>> {
-    let b = if !pic.image.is_empty() {
-        std::mem::take(&mut pic.image)
+    if !pic.image.is_empty() {
+        return Some(pic.image.to_owned());
     } else {
-        let buf = find_defer_image(pic.id.to_owned(), defer_images);
-        match buf {
-            Some(buf) => buf,
-            None => return None,
+        for img in defer_images {
+            if img.0 == pic.id {
+                return Some(img.1.to_owned());
+            }
         }
     };
 
-    None
-}
-
-fn find_defer_image(id: String, defer_images: &mut Vec<(String, Vec<u8>)>) -> Option<Vec<u8>> {
-    for img in defer_images {
-        if img.0 == id {
-            return Some(std::mem::take(&mut img.1));
-        }
-    }
     None
 }
 
