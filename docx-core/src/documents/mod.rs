@@ -127,6 +127,7 @@ pub struct Docx {
     pub themes: Vec<Theme>,
     // reader only (id, path, bytes)
     pub images: Vec<(String, String, Vec<u8>)>,
+    pub defer_images: Vec<(String, Vec<u8>)>,
     // reader only
     pub hyperlinks: Vec<(String, String, String)>,
 }
@@ -169,6 +170,7 @@ impl Default for Docx {
             custom_item_rels: vec![],
             themes: vec![],
             images: vec![],
+            defer_images: vec![],
             hyperlinks: vec![],
         }
     }
@@ -216,6 +218,11 @@ impl Docx {
 
     pub fn settings(mut self, s: Settings) -> Self {
         self.settings = s;
+        self
+    }
+
+    pub fn add_defer_image(mut self, id: String, buf: Vec<u8>) -> Self {
+        self.defer_images.push((id, buf));
         self
     }
 
@@ -843,7 +850,12 @@ impl Docx {
         for child in &mut self.document.children {
             match child {
                 DocumentChild::Paragraph(paragraph) => {
-                    collect_images_from_paragraph(paragraph, &mut images, &mut image_bufs);
+                    collect_images_from_paragraph(
+                        paragraph,
+                        &mut images,
+                        &mut image_bufs,
+                        &mut self.defer_images,
+                    );
                 }
                 DocumentChild::Table(table) => {
                     for TableChild::TableRow(row) in &mut table.rows {
@@ -855,6 +867,7 @@ impl Docx {
                                             paragraph,
                                             &mut images,
                                             &mut image_bufs,
+                                            &mut self.defer_images,
                                         );
                                     }
                                     TableCellContent::Table(table) => {
@@ -862,6 +875,7 @@ impl Docx {
                                             table,
                                             &mut images,
                                             &mut image_bufs,
+                                            &mut self.defer_images,
                                         );
                                     }
                                     TableCellContent::StructuredDataTag(tag) => {
@@ -873,6 +887,7 @@ impl Docx {
                                                     paragraph,
                                                     &mut images,
                                                     &mut image_bufs,
+                                                    &mut self.defer_images,
                                                 );
                                             }
                                             if let StructuredDataTagChild::Table(table) = child {
@@ -880,6 +895,7 @@ impl Docx {
                                                     table,
                                                     &mut images,
                                                     &mut image_bufs,
+                                                    &mut self.defer_images,
                                                 );
                                             }
                                         }
@@ -891,6 +907,7 @@ impl Docx {
                                                     paragraph,
                                                     &mut images,
                                                     &mut image_bufs,
+                                                    &mut self.defer_images,
                                                 );
                                             }
                                             if let TocContent::Table(table) = child {
@@ -898,6 +915,7 @@ impl Docx {
                                                     table,
                                                     &mut images,
                                                     &mut image_bufs,
+                                                    &mut self.defer_images,
                                                 );
                                             }
                                         }
@@ -908,6 +926,7 @@ impl Docx {
                                                     paragraph,
                                                     &mut images,
                                                     &mut image_bufs,
+                                                    &mut self.defer_images,
                                                 );
                                             }
                                             if let TocContent::Table(table) = child {
@@ -915,6 +934,7 @@ impl Docx {
                                                     table,
                                                     &mut images,
                                                     &mut image_bufs,
+                                                    &mut self.defer_images,
                                                 );
                                             }
                                         }
@@ -1137,13 +1157,19 @@ fn collect_images_from_paragraph(
     paragraph: &mut Paragraph,
     images: &mut Vec<(String, String)>,
     image_bufs: &mut Vec<(String, Vec<u8>)>,
+    defer_images: &mut Vec<(String, Vec<u8>)>,
 ) {
     for child in &mut paragraph.children {
         if let ParagraphChild::Run(run) = child {
             for child in &mut run.children {
                 if let RunChild::Drawing(d) = child {
                     if let Some(DrawingData::Pic(pic)) = &mut d.data {
-                        let b = std::mem::take(&mut pic.image);
+                        let maybe_bytes = resolve_image_source(pic, defer_images);
+                        if maybe_bytes.is_none() {
+                            continue;
+                        }
+                        let b: Vec<u8> = maybe_bytes.unwrap();
+
                         let buf = image_bufs
                             .iter()
                             .find(|x| x.0 == pic.id.clone() || x.1 == b.clone());
@@ -1172,7 +1198,11 @@ fn collect_images_from_paragraph(
                                         // For now only png supported
                                         format!("media/{}.png", pic.id),
                                     ));
-                                    let b = std::mem::take(&mut pic.image);
+                                    let maybe_bytes = resolve_image_source(pic, defer_images);
+                                    if maybe_bytes.is_none() {
+                                        continue;
+                                    }
+                                    let b: Vec<u8> = maybe_bytes.unwrap();
                                     image_bufs.push((pic.id.clone(), b));
                                 }
                             }
@@ -1189,7 +1219,12 @@ fn collect_images_from_paragraph(
                                                 // For now only png supported
                                                 format!("media/{}.png", pic.id),
                                             ));
-                                            let b = std::mem::take(&mut pic.image);
+                                            let maybe_bytes =
+                                                resolve_image_source(pic, defer_images);
+                                            if maybe_bytes.is_none() {
+                                                continue;
+                                            }
+                                            let b: Vec<u8> = maybe_bytes.unwrap();
                                             image_bufs.push((pic.id.clone(), b));
                                         }
                                     }
@@ -1211,7 +1246,11 @@ fn collect_images_from_paragraph(
                                     // For now only png supported
                                     format!("media/{}.png", pic.id),
                                 ));
-                                let b = std::mem::take(&mut pic.image);
+                                let maybe_bytes = resolve_image_source(pic, defer_images);
+                                if maybe_bytes.is_none() {
+                                    continue;
+                                }
+                                let b: Vec<u8> = maybe_bytes.unwrap();
                                 image_bufs.push((pic.id.clone(), b));
                             }
                         }
@@ -1220,6 +1259,32 @@ fn collect_images_from_paragraph(
             }
         }
     }
+}
+
+fn resolve_image_source(
+    pic: &mut Pic,
+    defer_images: &mut Vec<(String, Vec<u8>)>,
+) -> Option<Vec<u8>> {
+    let b = if !pic.image.is_empty() {
+        std::mem::take(&mut pic.image)
+    } else {
+        let buf = find_defer_image(pic.id.to_owned(), defer_images);
+        match buf {
+            Some(buf) => buf,
+            None => return None,
+        }
+    };
+
+    None
+}
+
+fn find_defer_image(id: String, defer_images: &mut Vec<(String, Vec<u8>)>) -> Option<Vec<u8>> {
+    for img in defer_images {
+        if img.0 == id {
+            return Some(std::mem::take(&mut img.1));
+        }
+    }
+    None
 }
 
 fn push_comment_and_comment_extended(
@@ -1251,43 +1316,59 @@ fn collect_images_from_table(
     table: &mut Table,
     images: &mut Vec<(String, String)>,
     image_bufs: &mut Vec<(String, Vec<u8>)>,
+    defer_images: &mut Vec<(String, Vec<u8>)>,
 ) {
     for TableChild::TableRow(row) in &mut table.rows {
         for TableRowChild::TableCell(cell) in &mut row.cells {
             for content in &mut cell.children {
                 match content {
                     TableCellContent::Paragraph(paragraph) => {
-                        collect_images_from_paragraph(paragraph, images, image_bufs);
+                        collect_images_from_paragraph(paragraph, images, image_bufs, defer_images);
                     }
                     TableCellContent::Table(table) => {
-                        collect_images_from_table(table, images, image_bufs)
+                        collect_images_from_table(table, images, image_bufs, defer_images)
                     }
                     TableCellContent::StructuredDataTag(tag) => {
                         for child in &mut tag.children {
                             if let StructuredDataTagChild::Paragraph(paragraph) = child {
-                                collect_images_from_paragraph(paragraph, images, image_bufs);
+                                collect_images_from_paragraph(
+                                    paragraph,
+                                    images,
+                                    image_bufs,
+                                    defer_images,
+                                );
                             }
                             if let StructuredDataTagChild::Table(table) = child {
-                                collect_images_from_table(table, images, image_bufs);
+                                collect_images_from_table(table, images, image_bufs, defer_images);
                             }
                         }
                     }
                     TableCellContent::TableOfContents(t) => {
                         for child in &mut t.before_contents {
                             if let TocContent::Paragraph(paragraph) = child {
-                                collect_images_from_paragraph(paragraph, images, image_bufs);
+                                collect_images_from_paragraph(
+                                    paragraph,
+                                    images,
+                                    image_bufs,
+                                    defer_images,
+                                );
                             }
                             if let TocContent::Table(table) = child {
-                                collect_images_from_table(table, images, image_bufs);
+                                collect_images_from_table(table, images, image_bufs, defer_images);
                             }
                         }
 
                         for child in &mut t.after_contents {
                             if let TocContent::Paragraph(paragraph) = child {
-                                collect_images_from_paragraph(paragraph, images, image_bufs);
+                                collect_images_from_paragraph(
+                                    paragraph,
+                                    images,
+                                    image_bufs,
+                                    defer_images,
+                                );
                             }
                             if let TocContent::Table(table) = child {
-                                collect_images_from_table(table, images, image_bufs);
+                                collect_images_from_table(table, images, image_bufs, defer_images);
                             }
                         }
                     }
