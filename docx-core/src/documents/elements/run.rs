@@ -289,6 +289,11 @@ impl Run {
         self
     }
 
+    pub fn vert_align(mut self, v: VertAlignType) -> Run {
+        self.run_property = self.run_property.vert_align(v);
+        self
+    }
+
     pub(crate) fn set_property(mut self, p: RunProperty) -> Run {
         self.run_property = p;
         self
