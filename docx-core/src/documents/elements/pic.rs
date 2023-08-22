@@ -98,6 +98,11 @@ impl Pic {
         }
     }
 
+    pub fn buf(mut self, buf: Vec<u8>) -> Pic {
+        self.image = buf;
+        self
+    }
+
     pub fn id(mut self, id: impl Into<String>) -> Pic {
         self.id = id.into();
         self
